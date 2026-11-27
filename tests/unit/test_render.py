@@ -67,5 +67,40 @@ def test_tiles_show_the_totals(data: dict) -> None:
 
 def test_render_writes_the_site(tmp_path: Path, data: dict) -> None:
     render(data, tmp_path, "Kurtis-H")
-    assert {p.name for p in tmp_path.iterdir()} == {"index.html", "data.json", "style.css", "favicon.svg"}
+    assert {p.name for p in tmp_path.iterdir()} == {
+        "index.html",
+        "data.json",
+        "style.css",
+        "favicon.svg",
+        "fonts",
+    }
+    assert sorted(p.name for p in (tmp_path / "fonts").iterdir()) == [
+        "OFL.txt",
+        "atkinson-hyperlegible-latin-400-normal.woff2",
+        "atkinson-hyperlegible-latin-700-normal.woff2",
+    ]
     assert json.loads((tmp_path / "data.json").read_text()) == data
+
+
+def test_verdict_reads_as_plain_sentences(data: dict) -> None:
+    from dashboard.render import verdict
+
+    for r in data["repos"]:
+        r["status"] = "passing"
+    for a in data["assessments"]:
+        for f in a["findings"]:
+            f["status"] = "fixed"
+    text = verdict(data)
+    assert f"All {len(data['repos'])} repos pass CI." in text
+    assert "are fixed and retested, 0 are accepted with a reason, and none are open." in text
+    data["assessments"][0]["findings"][0]["status"] = "open"
+    assert "1 is still open." in verdict(data)
+
+
+def test_the_bar_has_one_segment_per_status_present(data: dict) -> None:
+    from dashboard.render import bar
+
+    findings = [{"status": "fixed"}] * 3 + [{"status": "accepted"}]
+    svg = bar(findings)
+    assert svg.count("<rect") == 2 and "seg-open" not in svg
+    assert 'class="seg-fixed" x="0.000"' in svg and 'class="seg-accepted" x="75.000"' in svg
