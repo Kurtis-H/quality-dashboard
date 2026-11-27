@@ -73,13 +73,57 @@ def test_loads_cleanly_and_only_from_itself(browser: Browser, base_url: str, sch
     page.close()
 
 
-def test_tiles_match_the_data(browser: Browser, base_url: str, data: dict) -> None:
+def test_the_verdict_matches_the_data(browser: Browser, base_url: str, data: dict) -> None:
     t = totals(data)
     page, _, _ = open_page(browser, base_url)
-    assert f"{t['passing']} of {t['repos']}" in page.get_by_test_id("tile-ci").inner_text()
-    assert f"{t['fixed']} of {t['findings']}" in page.get_by_test_id("tile-fixed").inner_text()
-    assert page.get_by_test_id("tile-accepted").inner_text().endswith(str(t["accepted"]))
-    assert page.get_by_test_id("tile-open").inner_text().endswith(str(t["open"]))
+    ci = page.get_by_test_id("tile-ci")
+    assert ci.get_attribute("data-passing") == str(t["passing"])
+    assert ci.get_attribute("data-repos") == str(t["repos"])
+    assert str(t["repos"]) in ci.inner_text()
+    found = page.get_by_test_id("tile-findings")
+    for key in ("fixed", "accepted", "open", "findings"):
+        assert found.get_attribute(f"data-{key}") == str(t[key]), key
+    assert f"{t['fixed']} of {t['findings']}" in found.inner_text()
+    page.close()
+
+
+def test_the_build_board_has_a_tile_per_repo(browser: Browser, base_url: str, data: dict) -> None:
+    page, _, _ = open_page(browser, base_url)
+    label = {"passing": "Passing", "failing": "Failing", "running": "Running", "no runs": "No runs"}
+    assert page.locator("[data-tile]").count() == len(data["repos"])
+    for repo in data["repos"]:
+        tile = page.locator(f'[data-tile="{repo["name"]}"]')
+        assert tile.get_attribute("data-status") == repo["status"]
+        assert label[repo["status"]] in tile.inner_text()
+    page.close()
+
+
+def test_findings_bars_match_their_tables(browser: Browser, base_url: str, data: dict) -> None:
+    page, _, _ = open_page(browser, base_url)
+    for a in data["assessments"]:
+        block = page.locator(f'[data-assessment="{a["repo"]}"]')
+        key = block.locator(".bar-key").inner_text()
+        for status in ("fixed", "accepted", "open"):
+            n = sum(f["status"] == status for f in a["findings"])
+            assert f"{n} {status}" in key
+            assert block.locator(f".bar .seg-{status}").count() == (1 if n else 0)
+    page.close()
+
+
+def test_the_page_uses_its_own_font(browser: Browser, base_url: str) -> None:
+    page, _, requests = open_page(browser, base_url)
+    page.wait_for_load_state("networkidle")
+    assert any(u.endswith(".woff2") for u in requests)
+    # check() is true for a family that was never defined, so look for the loaded face itself.
+    loaded = "[...document.fonts].some(f => f.family.includes('Atkinson') && f.status === 'loaded')"
+    assert page.evaluate(loaded)
+    page.close()
+
+
+def test_phone_layout_does_not_scroll_sideways(browser: Browser, base_url: str) -> None:
+    page = browser.new_page(viewport={"width": 360, "height": 800})
+    page.goto(base_url + "/")
+    assert page.evaluate("document.documentElement.scrollWidth") <= 360
     page.close()
 
 
@@ -97,7 +141,7 @@ def test_every_repo_shows_its_ci_status(browser: Browser, base_url: str, data: d
 def test_every_finding_shows_its_status(browser: Browser, base_url: str, data: dict) -> None:
     page, _, _ = open_page(browser, base_url)
     for assessment in data["assessments"]:
-        table = page.locator(f'table[data-assessment="{assessment["repo"]}"]')
+        table = page.locator(f'[data-assessment="{assessment["repo"]}"] table')
         assert table.locator("tbody tr").count() == len(assessment["findings"])
         for f in assessment["findings"]:
             row = table.locator(f'tr[data-finding="{f["id"]}"]')
@@ -109,7 +153,8 @@ def test_every_finding_shows_its_status(browser: Browser, base_url: str, data: d
 def test_structure_is_accessible(browser: Browser, base_url: str) -> None:
     page, _, _ = open_page(browser, base_url)
     assert page.get_by_role("heading", level=1).count() == 1
-    assert page.get_by_role("heading", name="CI on main").count() == 1
+    assert page.get_by_role("heading", name="Build board").count() == 1
+    assert page.get_by_role("heading", name="Workflow detail").count() == 1
     assert page.get_by_role("heading", name="Assessment findings").count() == 1
     for table in page.locator("table").all():
         assert table.locator("caption").count() == 1
