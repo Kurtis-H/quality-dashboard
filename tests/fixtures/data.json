@@ -1,0 +1,252 @@
+{
+  "generated_at": "2026-11-27T18:00:00+00:00",
+  "repos": [
+    {
+      "name": "api-performance-lab",
+      "group": "The booking platform",
+      "description": "",
+      "url": "https://github.com/Kurtis-H/api-performance-lab",
+      "pushed_at": "2026-11-27T17:39:28Z",
+      "default_branch": "main",
+      "status": "passing",
+      "workflows": [
+        {
+          "workflow": "CI",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/Kurtis-H/api-performance-lab/actions/runs/46043551134",
+          "updated_at": "2026-11-27T17:42:55Z"
+        },
+        {
+          "workflow": "CodeQL",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/Kurtis-H/api-performance-lab/actions/runs/46043551118",
+          "updated_at": "2026-11-27T17:41:04Z"
+        }
+      ]
+    },
+    {
+      "name": "booking-web",
+      "group": "The booking platform",
+      "description": "React + TypeScript ticket booking app with Vitest, MSW, Playwright e2e, axe accessibility and OpenAPI contract tests against a real API",
+      "url": "https://github.com/Kurtis-H/booking-web",
+      "pushed_at": "2026-11-27T17:39:34Z",
+      "default_branch": "main",
+      "status": "passing",
+      "workflows": [
+        {
+          "workflow": "CI",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/Kurtis-H/booking-web/actions/runs/46043560744",
+          "updated_at": "2026-11-27T17:40:50Z"
+        },
+        {
+          "workflow": "CodeQL",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/Kurtis-H/booking-web/actions/runs/46043560754",
+          "updated_at": "2026-11-27T17:40:43Z"
+        }
+      ]
+    },
+    {
+      "name": "bug-hunt-lab",
+      "group": "Test frameworks and tooling",
+      "description": "QA practice app with 21 switchable bugs, a reference Playwright suite, and a mutation-testing scorecard showing which bugs your tests catch",
+      "url": "https://github.com/Kurtis-H/bug-hunt-lab",
+      "pushed_at": "2026-11-27T15:23:56Z",
+      "default_branch": "main",
+      "status": "failing",
+      "workflows": [
+        {
+          "workflow": "CI",
+          "status": "completed",
+          "conclusion": "failure",
+          "url": "https://github.com/Kurtis-H/bug-hunt-lab/actions/runs/46024555738",
+          "updated_at": "2026-11-27T15:29:21Z"
+        },
+        {
+          "workflow": "CodeQL",
+          "status": "completed",
+          "conclusion": "success",
+          "url": "https://github.com/Kurtis-H/bug-hunt-lab/actions/runs/46024555741",
+          "updated_at": "2026-11-27T15:24:51Z"
+        }
+      ]
+    },
+    {
+      "name": "quality-dashboard",
+      "group": "This dashboard",
+      "description": "",
+      "url": "https://github.com/Kurtis-H/quality-dashboard",
+      "pushed_at": "2026-11-27T18:02:41Z",
+      "default_branch": "main",
+      "status": "no runs",
+      "workflows": []
+    }
+  ],
+  "assessments": [
+    {
+      "repo": "booking-pentest",
+      "label": "Penetration test",
+      "url": "https://github.com/Kurtis-H/booking-pentest",
+      "report_url": "https://github.com/Kurtis-H/booking-pentest/blob/main/REPORT.md",
+      "findings": [
+        {
+          "id": "BP-01",
+          "title": "API keys are predictable",
+          "severity": "High",
+          "status": "accepted",
+          "fixed_in": "",
+          "accepted_because": "Lab test data: the load tests and fixtures need known keys. A real deployment must issue random keys (see the remediation)."
+        },
+        {
+          "id": "BP-02",
+          "title": "One account can buy every seat of an event",
+          "severity": "Medium",
+          "status": "fixed",
+          "fixed_in": "api-performance-lab#17",
+          "accepted_because": ""
+        },
+        {
+          "id": "BP-03",
+          "title": "Failed authentication is never rate limited",
+          "severity": "Medium",
+          "status": "fixed",
+          "fixed_in": "api-performance-lab#17",
+          "accepted_because": ""
+        },
+        {
+          "id": "BP-04",
+          "title": "Public endpoints have no rate limit",
+          "severity": "Medium",
+          "status": "accepted",
+          "fixed_in": "",
+          "accepted_because": "Anonymous traffic is limited at the edge (proxy or CDN) in a real deployment; the lab's load tests need unthrottled anonymous reads."
+        },
+        {
+          "id": "BP-05",
+          "title": "Operational endpoints and internal headers are public",
+          "severity": "Medium",
+          "status": "accepted",
+          "fixed_in": "",
+          "accepted_because": "/metrics, /health switches and X-DB-Queries are the lab's telemetry, used by the performance gates. Outside the lab they must be internal only."
+        },
+        {
+          "id": "BP-06",
+          "title": "API keys are stored in plain text",
+          "severity": "Medium",
+          "status": "fixed",
+          "fixed_in": "api-performance-lab#17",
+          "accepted_because": ""
+        },
+        {
+          "id": "BP-07",
+          "title": "No Content-Security-Policy or framing protection",
+          "severity": "Medium",
+          "status": "fixed",
+          "fixed_in": "booking-web#16",
+          "accepted_because": ""
+        },
+        {
+          "id": "BP-08",
+          "title": "Authenticated responses may be cached",
+          "severity": "Low",
+          "status": "fixed",
+          "fixed_in": "api-performance-lab#17",
+          "accepted_because": ""
+        }
+      ]
+    },
+    {
+      "repo": "mobile-security-lab",
+      "label": "Mobile security assessment",
+      "url": "https://github.com/Kurtis-H/mobile-security-lab",
+      "report_url": "https://github.com/Kurtis-H/mobile-security-lab/blob/main/REPORT.md",
+      "findings": [
+        {
+          "id": "MS-01",
+          "title": "The release build is signed with the debug certificate",
+          "severity": "Medium",
+          "status": "fixed",
+          "fixed_in": "booking-mobile#21",
+          "accepted_because": ""
+        },
+        {
+          "id": "MS-02",
+          "title": "The release build allows plain HTTP to local addresses",
+          "severity": "Medium",
+          "status": "fixed",
+          "fixed_in": "booking-mobile#21",
+          "accepted_because": ""
+        },
+        {
+          "id": "MS-03",
+          "title": "A demo API key is compiled into the release build",
+          "severity": "Low",
+          "status": "fixed",
+          "fixed_in": "booking-mobile#21",
+          "accepted_because": ""
+        },
+        {
+          "id": "MS-04",
+          "title": "App data can be backed up",
+          "severity": "Low",
+          "status": "fixed",
+          "fixed_in": "booking-mobile#21",
+          "accepted_because": ""
+        },
+        {
+          "id": "MS-05",
+          "title": "The app installs on Android 7, which gets no security updates",
+          "severity": "Low",
+          "status": "accepted",
+          "fixed_in": "",
+          "accepted_because": "Wider device reach for a demo app that holds no data at rest: its only secret lives in memory for the session. Revisit as Android 7 to 9 decline."
+        }
+      ]
+    },
+    {
+      "repo": "resilience-lab",
+      "label": "Fault injection",
+      "url": "https://github.com/Kurtis-H/resilience-lab",
+      "report_url": "https://github.com/Kurtis-H/resilience-lab/blob/main/REPORT.md",
+      "findings": [
+        {
+          "id": "RL-01",
+          "title": "A locked table stalls requests until the lock is released",
+          "severity": "High",
+          "status": "fixed",
+          "fixed_in": "api-performance-lab#18",
+          "accepted_because": ""
+        },
+        {
+          "id": "RL-02",
+          "title": "A database outage returns a bare 500",
+          "severity": "Medium",
+          "status": "fixed",
+          "fixed_in": "api-performance-lab#18",
+          "accepted_because": ""
+        },
+        {
+          "id": "RL-03",
+          "title": "Nothing reports that the database is down",
+          "severity": "Medium",
+          "status": "fixed",
+          "fixed_in": "api-performance-lab#18",
+          "accepted_because": ""
+        },
+        {
+          "id": "RL-04",
+          "title": "The web app waits forever on an API that doesn't answer",
+          "severity": "Medium",
+          "status": "fixed",
+          "fixed_in": "booking-web#17",
+          "accepted_because": ""
+        }
+      ]
+    }
+  ]
+}

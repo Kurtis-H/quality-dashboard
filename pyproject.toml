@@ -1,0 +1,22 @@
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S"]
+# HTML templates: long lines read better than split markup.
+"dashboard/render.py" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.mypy]
+files = ["dashboard"]
+strict = true
+
+[[tool.mypy.overrides]]
+module = ["cvss"]
+ignore_missing_imports = true
