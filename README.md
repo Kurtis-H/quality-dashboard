@@ -17,9 +17,9 @@ A scheduled GitHub Actions job runs daily, on every push to `main` and by hand:
 
 - **Fetched code is never run.** The findings registers come from other repos. They're parsed with Python's `ast`, and only literal values are read. A test proves a register with code at the top level is read without that code running.
 - **No JavaScript.** The page is plain HTML and CSS with a Content-Security-Policy that allows nothing but its own stylesheet. Every value from the data is escaped, and links can only point to GitHub. Tests try script and image injection through the data and a `javascript:` link.
-- **Readable at a glance.** The page opens with a two-sentence verdict, then a build board: every repo as a tile, like the CI wall on a team's TV. Findings get a bar of fixed, accepted and open, then the full ledger.
+- **Laid out like a dashboard.** KPI gauges for CI and findings, charts of findings by assessment and by severity, a card per repo with its workflows, and the full findings ledger. Hovering a chart bar shows its count, and on phones everything stacks into one column.
 - **Status never rests on color alone.** Each state has its own icon shape and a text label, and the page follows the system's light or dark setting.
-- **Set in Atkinson Hyperlegible,** a typeface designed by the Braille Institute for low-vision readers, self-hosted so the page loads nothing from anywhere else (OFL license in `dashboard/static/fonts/`).
+- **Self-hosted Inter,** so the page loads nothing from anywhere else (OFL license in `dashboard/static/fonts/`). Chart bars are HTML with whole-percent width classes, because the CSP blocks inline styles.
 - **Read-only and public.** The job uses its own short-lived token with read access, only for public repo data. There's no server and nothing to host.
 
 ## Layout

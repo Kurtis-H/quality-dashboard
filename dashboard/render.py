@@ -1,12 +1,15 @@
-"""Render the collected data as a static page: index.html, style.css, data.json.
+"""Render the collected data as a static dashboard: index.html, style.css, data.json.
 
 Every value from the data is escaped. The page has no JavaScript, and its
-Content-Security-Policy allows nothing but its own stylesheet.
+Content-Security-Policy allows nothing but its own stylesheet and font, so
+charts are SVG drawn with attributes (inline styles would be blocked) and
+their tooltips are SVG <title> elements.
 """
 
 from __future__ import annotations
 
 import json
+import math
 import re
 import shutil
 from datetime import datetime
@@ -15,6 +18,8 @@ from pathlib import Path
 from typing import Any
 
 from dashboard.collect import FAILING, NO_RUNS, PASSING, RUNNING, totals
+
+Data = dict[str, Any]
 
 STATIC = Path(__file__).parent / "static"
 CSP = (
@@ -37,12 +42,14 @@ CI_STATES = {
 }
 RUN_STATES = {"success": "good", "skipped": "good", "neutral": "good"}
 FINDING_STATES = {"fixed": ("good", "Fixed"), "accepted": ("none", "Accepted"), "open": ("bad", "Open")}
+STATUSES = ("fixed", "accepted", "open")
+SEVERITIES = ("Critical", "High", "Medium", "Low")
 PR_REF = re.compile(r"^([A-Za-z0-9_.-]+)#(\d+)$")
 
 
-def icon(kind: str) -> str:
+def icon(kind: str, cls: str = "icon") -> str:
     return (
-        f'<svg class="icon {kind}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
+        f'<svg class="{cls} {kind}" viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
         f"{ICONS[kind]}</svg>"
     )
 
@@ -51,10 +58,11 @@ def badge(kind: str, label: str) -> str:
     return f'<span class="badge {kind}">{icon(kind)}{escape(label)}</span>'
 
 
-def link(url: str, text: str) -> str:
+def link(url: str, text: str, cls: str = "") -> str:
     if not url.startswith("https://github.com/"):
         return escape(text)  # only ever link to GitHub
-    return f'<a href="{escape(url)}">{escape(text)}</a>'
+    attr = f' class="{cls}"' if cls else ""
+    return f'<a{attr} href="{escape(url)}">{escape(text)}</a>'
 
 
 def pr_link(ref: str, owner: str) -> str:
@@ -71,7 +79,7 @@ def when(iso: str) -> str:
     return f'<time datetime="{escape(iso)}">{t.strftime("%-d %b %Y")}</time>'
 
 
-def ci_note(data: dict[str, Any]) -> str:
+def ci_note(data: Data) -> str:
     """What the repos that aren't passing are doing, e.g. "1 failing, 1 with no runs yet"."""
     labels = {FAILING: "failing", RUNNING: "running", NO_RUNS: "with no runs yet"}
     counts = [
@@ -82,82 +90,198 @@ def ci_note(data: dict[str, Any]) -> str:
     return ", ".join(counts) if counts else "none failing"
 
 
-def verdict(data: dict[str, Any]) -> str:
-    """The headline: two plain sentences a reader gets before anything else."""
+def summary(data: Data) -> str:
+    """One plain sentence under the header: the whole page in words."""
     t = totals(data)
-    if t["passing"] == t["repos"]:
-        ci = f"All {t['repos']} repos pass CI."
-    else:
-        ci = f"{t['passing']} of {t['repos']} repos pass CI ({ci_note(data)})."
-    is_are = {1: "is"}
-    still_open = (
-        "none are open" if not t["open"] else f"{t['open']} {is_are.get(t['open'], 'are')} still open"
+    ci = (
+        f"All {t['repos']} repos pass CI"
+        if t["passing"] == t["repos"]
+        else f"{t['passing']} of {t['repos']} repos pass CI ({ci_note(data)})"
     )
-    findings = (
-        f"{t['fixed']} of {t['findings']} security and resilience findings are fixed and retested, "
-        f"{t['accepted']} {is_are.get(t['accepted'], 'are')} accepted with a reason, and {still_open}."
+    still_open = "none are open" if not t["open"] else f"{t['open']} still open"
+    return (
+        f"{ci}. {t['fixed']} of {t['findings']} findings are fixed and retested, "
+        f"{t['accepted']} accepted with a reason, and {still_open}."
+    )
+
+
+def workflow_totals(data: Data) -> tuple[int, int]:
+    runs = [w for r in data["repos"] for w in r["workflows"]]
+    good = sum(w["status"] == "completed" and (w["conclusion"] or "") in RUN_STATES for w in runs)
+    return good, len(runs)
+
+
+# Charts --------------------------------------------------------------------
+
+
+def ring(value: int, total: int, tone: str) -> str:
+    """A ring gauge: the arc's length is value / total."""
+    r = 30
+    c = 2 * math.pi * r
+    share = value / total if total else 0
+    arc = (
+        f'<circle class="ring-arc {tone}" cx="40" cy="40" r="{r}" stroke-dasharray="{c * share:.2f} {c:.2f}" '
+        'transform="rotate(-90 40 40)"/>'
+        if share
+        else ""
     )
     return (
-        f'<p class="verdict"><span data-testid="tile-ci" data-passing="{t["passing"]}" '
-        f'data-repos="{t["repos"]}">{escape(ci)}</span> '
-        f'<span data-testid="tile-findings" data-fixed="{t["fixed"]}" data-accepted="{t["accepted"]}" '
-        f'data-open="{t["open"]}" data-findings="{t["findings"]}">{escape(findings)}</span></p>'
+        '<svg class="ring" viewBox="0 0 80 80" aria-hidden="true" focusable="false">'
+        f'<circle class="ring-track" cx="40" cy="40" r="{r}"/>{arc}</svg>'
     )
 
 
-def radiator(data: dict[str, Any]) -> str:
-    """Every repo as a tile, grouped as on the profile: the build board at a glance."""
-    groups: dict[str, list[dict[str, Any]]] = {}
+def kpi(test_id: str, attrs: str, label: str, value: str, note: str, gauge: str) -> str:
+    return (
+        f'<article class="kpi" data-testid="{test_id}" {attrs}>'
+        f'<div class="kpi-gauge">{gauge}<span class="kpi-value">{escape(value)}</span></div>'
+        f'<h2 class="kpi-label">{escape(label)}</h2><p class="kpi-note">{escape(note)}</p></article>'
+    )
+
+
+def kpis(data: Data) -> str:
+    t = totals(data)
+    good_runs, runs = workflow_totals(data)
+    resolved = t["fixed"] + t["accepted"]
+    pct = round(100 * t["passing"] / t["repos"]) if t["repos"] else 0
+    return (
+        '<div class="kpis">'
+        + "".join(
+            [
+                kpi(
+                    "tile-ci",
+                    f'data-passing="{t["passing"]}" data-repos="{t["repos"]}"',
+                    "Repos passing CI",
+                    f"{pct}%",
+                    f"{t['passing']} of {t['repos']} repos, {ci_note(data)}",
+                    ring(t["passing"], t["repos"], "good" if t["passing"] == t["repos"] else "bad"),
+                ),
+                kpi(
+                    "tile-workflows",
+                    f'data-good="{good_runs}" data-runs="{runs}"',
+                    "Workflows green",
+                    str(good_runs),
+                    f"of {runs} workflows on main",
+                    ring(good_runs, runs, "good" if good_runs == runs else "bad"),
+                ),
+                kpi(
+                    "tile-findings",
+                    f'data-fixed="{t["fixed"]}" data-accepted="{t["accepted"]}" data-open="{t["open"]}" '
+                    f'data-findings="{t["findings"]}"',
+                    "Findings resolved",
+                    f"{resolved}/{t['findings']}",
+                    f"{t['fixed']} fixed and retested, {t['accepted']} accepted",
+                    ring(resolved, t["findings"], "good" if resolved == t["findings"] else "bad"),
+                ),
+                kpi(
+                    "tile-open",
+                    f'data-open="{t["open"]}"',
+                    "Open findings",
+                    str(t["open"]),
+                    "across 3 assessments" if not t["open"] else "still to fix or accept",
+                    ring(t["open"], t["findings"], "bad") if t["open"] else icon("good", "kpi-icon"),
+                ),
+            ]
+        )
+        + "</div>"
+    )
+
+
+def stacked_bars(rows: list[tuple[str, dict[str, int]]], test_id: str) -> str:
+    """Horizontal bars, one per row, split into fixed / accepted / open.
+
+    HTML, so labels stay readable at any width. Widths are whole-percent
+    classes (.w-0 to .w-100 in style.css) because the CSP blocks inline
+    styles. Every bar is to one scale, the largest row, so lengths compare.
+    """
+    biggest = max((sum(c.values()) for _, c in rows), default=1) or 1
+    out = [f'<div class="bars" data-testid="{test_id}">']
+    for name, counts in rows:
+        segs = []
+        for status in STATUSES:
+            n = counts[status]
+            if n:
+                segs.append(
+                    f'<span class="seg seg-{status} w-{round(100 * n / biggest)}" data-status="{status}" '
+                    f'data-count="{n}" title="{escape(name)}: {n} {status}"></span>'
+                )
+        total = sum(counts.values())
+        words = ", ".join(f"{counts[s]} {s}" for s in STATUSES if counts[s])
+        out.append(
+            f'<div class="bar-row"><span class="bar-label">{escape(name)}</span>'
+            f'<span class="bar-track" role="img" aria-label="{escape(name)}: {escape(words)}">{"".join(segs)}</span>'
+            f'<span class="bar-total">{total}</span></div>'
+        )
+    out.append("</div>")
+    return "".join(out)
+
+
+def legend() -> str:
+    return (
+        '<p class="legend"><span class="k-fixed">Fixed and retested</span>'
+        '<span class="k-accepted">Accepted with a reason</span><span class="k-open">Open</span></p>'
+    )
+
+
+def charts(data: Data) -> str:
+    by_assessment = [
+        (a["label"], {s: sum(f["status"] == s for f in a["findings"]) for s in STATUSES})
+        for a in data["assessments"]
+    ]
+    findings = [f for a in data["assessments"] for f in a["findings"]]
+    by_severity = [
+        (sev, {s: sum(f["status"] == s and f["severity"] == sev for f in findings) for s in STATUSES})
+        for sev in SEVERITIES
+        if any(f["severity"] == sev for f in findings)
+    ]
+    return (
+        '<div class="grid-2">'
+        '<section class="panel" aria-labelledby="by-assessment"><header class="panel-head">'
+        '<h2 id="by-assessment">Findings by assessment</h2>'
+        "<p>Penetration test, mobile security and fault injection</p></header>"
+        f"{stacked_bars(by_assessment, 'chart-assessment')}{legend()}</section>"
+        '<section class="panel" aria-labelledby="by-severity"><header class="panel-head">'
+        '<h2 id="by-severity">Findings by severity</h2>'
+        "<p>Rated with CVSS 3.1 or by the assessment</p></header>"
+        f"{stacked_bars(by_severity, 'chart-severity')}{legend()}</section>"
+        "</div>"
+    )
+
+
+# Repositories and findings -------------------------------------------------
+
+
+def repos_panel(data: Data) -> str:
+    cards = []
     for r in data["repos"]:
-        groups.setdefault(r["group"], []).append(r)
-    parts = [
-        '<section class="radiator" aria-labelledby="board"><h2 id="board">Build board</h2>',
-        '<p class="lede">Each repo\'s CI on its main branch. A cross marks a failing workflow.</p>',
-    ]
-    for group, repos in groups.items():
-        tiles = []
-        for r in repos:
-            kind, label = CI_STATES[r["status"]]
-            name = escape(r["name"])
-            href = escape(r["url"]) if r["url"].startswith("https://github.com/") else ""
-            tag = f'<a href="{href}"' if href else "<div"
-            close = "</a>" if href else "</div>"
-            tiles.append(
-                f'<li>{tag} class="tile {kind}" data-tile="{name}" data-status="{escape(r["status"])}">'
-                f'{icon(kind)}<span class="tile-name">{name}</span>'
-                f'<span class="tile-state">{escape(label)}</span>{close}</li>'
-            )
-        parts.append(f'<h3>{escape(group)}</h3><ul class="tiles" role="list">{"".join(tiles)}</ul>')
-    parts.append("</section>")
-    return "\n".join(parts)
+        kind, label = CI_STATES[r["status"]]
+        dots = "".join(
+            f"<li>{link(w['url'], w['workflow'], 'wf ' + RUN_STATES.get(w['conclusion'] or '', 'bad' if w['status'] == 'completed' else 'busy'))}</li>"
+            for w in r["workflows"]
+        )
+        cards.append(
+            f'<li class="repo {kind}" data-tile="{escape(r["name"])}" data-status="{escape(r["status"])}">'
+            f'<div class="repo-top">{link(r["url"], r["name"], "repo-name")}'
+            f'<span class="pill {kind}">{icon(kind)}{escape(label)}</span></div>'
+            f'<p class="repo-group">{escape(r["group"])}</p>'
+            f'<p class="repo-desc">{escape(r["description"])}</p>'
+            f'<div class="repo-foot"><ul class="wfs" aria-label="Workflows">{dots}</ul>'
+            f'<span class="repo-push">Pushed {when(r["pushed_at"])}</span></div></li>'
+        )
+    return (
+        '<section class="panel" aria-labelledby="repos"><header class="panel-head">'
+        '<h2 id="repos">Repositories</h2>'
+        "<p>Latest completed run of each workflow on main. One failing workflow marks the repo failing.</p>"
+        f'</header><ul class="repos" role="list">{"".join(cards)}</ul></section>'
+    )
 
 
-def bar(findings: list[dict[str, Any]]) -> str:
-    """A segmented bar of fixed, accepted and open, drawn in SVG: the CSP allows no inline styles."""
-    total = len(findings) or 1
-    x = 0.0
-    rects = []
-    for status in ("fixed", "accepted", "open"):
-        n = sum(f["status"] == status for f in findings)
-        if n:
-            w = 100 * n / total
-            rects.append(
-                f'<rect class="seg-{status}" x="{x:.3f}" y="0" width="{max(w - 0.6, 0.4):.3f}" height="8" rx="2"/>'
-            )
-            x += w
-    return f'<svg class="bar" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true" focusable="false">{"".join(rects)}</svg>'
-
-
-def findings_section(data: dict[str, Any], owner: str) -> str:
-    parts = [
-        '<section aria-labelledby="findings"><h2 id="findings">Assessment findings</h2>',
-        '<p class="lede">Read from each assessment\'s findings register, the same file its tests check in CI.</p>',
-    ]
+def findings_panel(data: Data, owner: str) -> str:
+    blocks = []
     for a in data["assessments"]:
-        fs = a["findings"]
-        n = {s: sum(f["status"] == s for f in fs) for s in ("fixed", "accepted", "open")}
+        n = {s: sum(f["status"] == s for f in a["findings"]) for s in STATUSES}
         rows = []
-        for f in fs:
+        for f in a["findings"]:
             kind, label = FINDING_STATES[f["status"]]
             detail = (
                 pr_link(f["fixed_in"], owner) if f["status"] == "fixed" else escape(f["accepted_because"])
@@ -165,64 +289,30 @@ def findings_section(data: dict[str, Any], owner: str) -> str:
             sev = escape(f["severity"])
             rows.append(
                 f'<tr data-finding="{escape(f["id"])}" data-status="{escape(f["status"])}">'
-                f'<th scope="row">{escape(f["id"])}</th><td>{escape(f["title"])}</td>'
+                f'<th scope="row">{escape(f["id"])}</th><td class="f-title">{escape(f["title"])}</td>'
                 f'<td><span class="sev sev-{sev.lower()}">{sev}</span></td>'
-                f"<td>{badge(kind, label)}</td><td>{detail}</td></tr>"
+                f'<td>{badge(kind, label)}</td><td class="f-detail">{detail}</td></tr>'
             )
-        parts.append(
+        blocks.append(
             f'<div class="assessment" data-assessment="{escape(a["repo"])}">'
             f'<div class="assessment-head"><h3>{escape(a["label"])}</h3>'
-            f'<p class="assessment-links">{link(a["url"], a["repo"])}, {link(a["report_url"], "the report")}</p></div>'
-            f'{bar(fs)}<p class="bar-key"><span class="k-fixed">{n["fixed"]} fixed</span>'
+            f'<p class="counts"><span class="k-fixed">{n["fixed"]} fixed</span>'
             f'<span class="k-accepted">{n["accepted"]} accepted</span><span class="k-open">{n["open"]} open</span></p>'
+            f'<p class="assessment-links">{link(a["url"], a["repo"])} {link(a["report_url"], "Report")}</p></div>'
             f'<table class="findings"><caption class="visually-hidden">{escape(a["label"])} findings</caption>'
-            '<colgroup><col class="c-id"><col class="c-title"><col class="c-sev"><col class="c-status"><col class="c-detail"></colgroup>'
             '<thead><tr><th scope="col">ID</th><th scope="col">Finding</th><th scope="col">Severity</th>'
             '<th scope="col">Status</th><th scope="col">Fix, or why accepted</th></tr></thead>'
             f"<tbody>{''.join(rows)}</tbody></table></div>"
         )
-    parts.append("</section>")
-    return "\n".join(parts)
+    return (
+        '<section class="panel" aria-labelledby="findings"><header class="panel-head">'
+        '<h2 id="findings">Assessment findings</h2>'
+        "<p>Read from each assessment's findings register, the same file its tests check in CI.</p>"
+        f"</header>{''.join(blocks)}</section>"
+    )
 
 
-def repo_rows(repos: list[dict[str, Any]]) -> str:
-    rows = []
-    for r in repos:
-        kind, label = CI_STATES[r["status"]]
-        runs = " ".join(
-            f'<span class="run">{icon(RUN_STATES.get(w["conclusion"] or "", "busy" if w["status"] != "completed" else "bad"))}'
-            f"{link(w['url'], w['workflow'])}</span>"
-            for w in r["workflows"]
-        )
-        rows.append(
-            f'<tr data-repo="{escape(r["name"])}" data-status="{escape(r["status"])}">'
-            f'<th scope="row">{link(r["url"], r["name"])}<span class="desc">{escape(r["description"])}</span></th>'
-            f'<td>{badge(kind, label)}</td><td class="runs">{runs}</td><td>{when(r["pushed_at"])}</td></tr>'
-        )
-    return "\n".join(rows)
-
-
-def ci_section(data: dict[str, Any]) -> str:
-    groups: dict[str, list[dict[str, Any]]] = {}
-    for r in data["repos"]:
-        groups.setdefault(r["group"], []).append(r)
-    parts = [
-        '<section aria-labelledby="ci"><h2 id="ci">Workflow detail</h2>',
-        '<p class="lede">The latest completed run of each workflow on the default branch. One failing workflow marks the repo failing.</p>',
-    ]
-    for group, repos in groups.items():
-        parts.append(
-            f'<table class="ci"><caption>{escape(group)}</caption>'
-            '<colgroup><col class="c-repo"><col class="c-ci"><col class="c-runs"><col class="c-push"></colgroup>'
-            '<thead><tr><th scope="col">Repo</th>'
-            '<th scope="col">CI</th><th scope="col">Workflows</th><th scope="col">Last push</th></tr></thead>'
-            f"<tbody>{repo_rows(repos)}</tbody></table>"
-        )
-    parts.append("</section>")
-    return "\n".join(parts)
-
-
-def page(data: dict[str, Any], owner: str) -> str:
+def page(data: Data, owner: str) -> str:
     t = totals(data)
     generated = datetime.fromisoformat(data["generated_at"])
     return f"""<!DOCTYPE html>
@@ -237,25 +327,29 @@ def page(data: dict[str, Any], owner: str) -> str:
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<header class="masthead">
-<h1>Quality dashboard</h1>
-<p class="byline">{link(f"https://github.com/{owner}", "Kurtis H")}, QA engineer. Updated <time datetime="{escape(data["generated_at"])}">{generated.strftime("%-d %b %Y at %H:%M UTC")}</time>.</p>
+<header class="topbar">
+<div class="topbar-inner">
+<div class="brand">{icon("good", "brand-mark")}<div><h1>Quality dashboard</h1>
+<p class="brand-sub">{link(f"https://github.com/{owner}", "Kurtis H")}, QA engineer</p></div></div>
+<p class="updated">Updated <time datetime="{escape(data["generated_at"])}">{generated.strftime("%-d %b %Y, %H:%M UTC")}</time></p>
+</div>
 </header>
 <main>
-{verdict(data)}
-{radiator(data)}
-{findings_section(data, owner)}
-{ci_section(data)}
+<p class="summary">{escape(summary(data))}</p>
+{kpis(data)}
+{charts(data)}
+{repos_panel(data)}
+{findings_panel(data, owner)}
 </main>
 <footer>
-<p>Rebuilt daily and on every change by {link(f"https://github.com/{owner}/quality-dashboard", "quality-dashboard")}. A scheduled job reads the GitHub API and each assessment's findings register, a browser test checks every number on this page against its sources, and only then is it published. The raw data is in <a href="data.json">data.json</a>.</p>
+<p>Rebuilt daily and on every change by {link(f"https://github.com/{owner}/quality-dashboard", "quality-dashboard")}. A scheduled job reads the GitHub API and each assessment's findings register, a browser test checks every number here against its sources, and only then is the page published. Raw data: <a href="data.json">data.json</a>.</p>
 </footer>
 </body>
 </html>
 """
 
 
-def render(data: dict[str, Any], out: Path, owner: str) -> None:
+def render(data: Data, out: Path, owner: str) -> None:
     out.mkdir(parents=True, exist_ok=True)
     (out / "index.html").write_text(page(data, owner))
     (out / "data.json").write_text(json.dumps(data, indent=2))

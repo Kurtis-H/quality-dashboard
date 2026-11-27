@@ -37,6 +37,6 @@ GROUPS: dict[str, list[str]] = {
 # Assessments whose findings register (findings.py) the dashboard reads.
 ASSESSMENTS: dict[str, str] = {
     "booking-pentest": "Penetration test",
-    "mobile-security-lab": "Mobile security assessment",
+    "mobile-security-lab": "Mobile security",
     "resilience-lab": "Fault injection",
 }

@@ -73,40 +73,62 @@ def test_loads_cleanly_and_only_from_itself(browser: Browser, base_url: str, sch
     page.close()
 
 
-def test_the_verdict_matches_the_data(browser: Browser, base_url: str, data: dict) -> None:
+def test_the_kpis_match_the_data(browser: Browser, base_url: str, data: dict) -> None:
     t = totals(data)
     page, _, _ = open_page(browser, base_url)
     ci = page.get_by_test_id("tile-ci")
     assert ci.get_attribute("data-passing") == str(t["passing"])
     assert ci.get_attribute("data-repos") == str(t["repos"])
-    assert str(t["repos"]) in ci.inner_text()
+    assert f"{t['passing']} of {t['repos']} repos" in ci.inner_text()
     found = page.get_by_test_id("tile-findings")
     for key in ("fixed", "accepted", "open", "findings"):
         assert found.get_attribute(f"data-{key}") == str(t[key]), key
-    assert f"{t['fixed']} of {t['findings']}" in found.inner_text()
+    assert f"{t['fixed'] + t['accepted']}/{t['findings']}" in found.inner_text()
+    assert page.get_by_test_id("tile-open").get_attribute("data-open") == str(t["open"])
+    runs = [w for r in data["repos"] for w in r["workflows"]]
+    good = sum(
+        w["status"] == "completed" and w["conclusion"] in ("success", "skipped", "neutral") for w in runs
+    )
+    wf = page.get_by_test_id("tile-workflows")
+    assert (wf.get_attribute("data-good"), wf.get_attribute("data-runs")) == (str(good), str(len(runs)))
     page.close()
 
 
-def test_the_build_board_has_a_tile_per_repo(browser: Browser, base_url: str, data: dict) -> None:
+def test_every_repo_has_a_card_with_its_status(browser: Browser, base_url: str, data: dict) -> None:
     page, _, _ = open_page(browser, base_url)
     label = {"passing": "Passing", "failing": "Failing", "running": "Running", "no runs": "No runs"}
     assert page.locator("[data-tile]").count() == len(data["repos"])
     for repo in data["repos"]:
-        tile = page.locator(f'[data-tile="{repo["name"]}"]')
-        assert tile.get_attribute("data-status") == repo["status"]
-        assert label[repo["status"]] in tile.inner_text()
+        card = page.locator(f'[data-tile="{repo["name"]}"]')
+        assert card.get_attribute("data-status") == repo["status"]
+        assert label[repo["status"]] in card.inner_text()
+        assert card.locator(".wf").count() == len(repo["workflows"])
     page.close()
 
 
-def test_findings_bars_match_their_tables(browser: Browser, base_url: str, data: dict) -> None:
+@pytest.mark.parametrize("chart", ["chart-assessment", "chart-severity"])
+def test_charts_add_up_to_the_findings(browser: Browser, base_url: str, data: dict, chart: str) -> None:
+    findings = [f for a in data["assessments"] for f in a["findings"]]
     page, _, _ = open_page(browser, base_url)
-    for a in data["assessments"]:
-        block = page.locator(f'[data-assessment="{a["repo"]}"]')
-        key = block.locator(".bar-key").inner_text()
+    segs = page.get_by_test_id(chart).locator(".seg")
+    for status in ("fixed", "accepted", "open"):
+        shown = sum(
+            int(s.get_attribute("data-count")) for s in segs.all() if s.get_attribute("data-status") == status
+        )
+        assert shown == sum(f["status"] == status for f in findings), status
+    page.close()
+
+
+def test_the_assessment_chart_matches_each_ledger(browser: Browser, base_url: str, data: dict) -> None:
+    page, _, _ = open_page(browser, base_url)
+    rows = page.get_by_test_id("chart-assessment").locator(".bar-row").all()
+    assert len(rows) == len(data["assessments"])
+    for row, a in zip(rows, data["assessments"], strict=True):
+        assert a["label"] in row.inner_text()
+        assert row.locator(".bar-total").inner_text() == str(len(a["findings"]))
+        key = page.locator(f'[data-assessment="{a["repo"]}"] .counts').inner_text()
         for status in ("fixed", "accepted", "open"):
-            n = sum(f["status"] == status for f in a["findings"])
-            assert f"{n} {status}" in key
-            assert block.locator(f".bar .seg-{status}").count() == (1 if n else 0)
+            assert f"{sum(f['status'] == status for f in a['findings'])} {status}" in key
     page.close()
 
 
@@ -115,26 +137,16 @@ def test_the_page_uses_its_own_font(browser: Browser, base_url: str) -> None:
     page.wait_for_load_state("networkidle")
     assert any(u.endswith(".woff2") for u in requests)
     # check() is true for a family that was never defined, so look for the loaded face itself.
-    loaded = "[...document.fonts].some(f => f.family.includes('Atkinson') && f.status === 'loaded')"
+    loaded = "[...document.fonts].some(f => f.family.includes('Inter') && f.status === 'loaded')"
     assert page.evaluate(loaded)
     page.close()
 
 
-def test_phone_layout_does_not_scroll_sideways(browser: Browser, base_url: str) -> None:
-    page = browser.new_page(viewport={"width": 360, "height": 800})
+@pytest.mark.parametrize("width", [360, 768, 1366])
+def test_no_sideways_scroll(browser: Browser, base_url: str, width: int) -> None:
+    page = browser.new_page(viewport={"width": width, "height": 800})
     page.goto(base_url + "/")
-    assert page.evaluate("document.documentElement.scrollWidth") <= 360
-    page.close()
-
-
-def test_every_repo_shows_its_ci_status(browser: Browser, base_url: str, data: dict) -> None:
-    page, _, _ = open_page(browser, base_url)
-    for repo in data["repos"]:
-        row = page.locator(f'tr[data-repo="{repo["name"]}"]')
-        assert row.count() == 1, repo["name"]
-        assert row.get_attribute("data-status") == repo["status"]
-        label = {"passing": "Passing", "failing": "Failing", "running": "Running", "no runs": "No runs"}
-        assert label[repo["status"]] in row.inner_text()
+    assert page.evaluate("document.documentElement.scrollWidth") <= width
     page.close()
 
 
@@ -153,10 +165,12 @@ def test_every_finding_shows_its_status(browser: Browser, base_url: str, data: d
 def test_structure_is_accessible(browser: Browser, base_url: str) -> None:
     page, _, _ = open_page(browser, base_url)
     assert page.get_by_role("heading", level=1).count() == 1
-    assert page.get_by_role("heading", name="Build board").count() == 1
-    assert page.get_by_role("heading", name="Workflow detail").count() == 1
-    assert page.get_by_role("heading", name="Assessment findings").count() == 1
+    for name in ("Findings by assessment", "Findings by severity", "Repositories", "Assessment findings"):
+        assert page.get_by_role("heading", name=name).count() == 1, name
     for table in page.locator("table").all():
         assert table.locator("caption").count() == 1
+    # Every bar reads out its counts; icons are decoration next to a text label.
+    for track in page.locator(".bar-track").all():
+        assert track.get_attribute("role") == "img" and track.get_attribute("aria-label")
     assert page.locator("svg.icon:not([aria-hidden='true'])").count() == 0
     page.close()
