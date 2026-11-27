@@ -8,7 +8,7 @@ One page that shows the health of my whole portfolio: CI status for every repo, 
 
 A scheduled GitHub Actions job runs daily, on every push to `main` and by hand:
 
-1. **Collect.** [`dashboard/collect.py`](dashboard/collect.py) reads the GitHub API: for each repo, the latest run of each of its own workflows on the default branch. One failing workflow marks the repo failing. It also reads each assessment's findings register, `findings.py`, which is the same file that assessment's tests check in its own CI. So the page can't disagree with the reports.
+1. **Collect.** [`dashboard/collect.py`](dashboard/collect.py) reads the GitHub API: for each repo, the latest completed run of each of its own workflows on the default branch. One failing workflow marks the repo failing. It also reads each assessment's findings register, `findings.py`, which is the same file that assessment's tests check in its own CI. So the page can't disagree with the reports.
 2. **Render.** [`dashboard/render.py`](dashboard/render.py) writes a static page (`index.html`, `style.css`) and the raw `data.json`.
 3. **Check.** Playwright opens the built page and compares every number on it with `data.json`: the headline tiles, each repo's CI status, each finding's status and severity. A mismatch fails the job, and nothing is deployed.
 4. **Deploy** to GitHub Pages.

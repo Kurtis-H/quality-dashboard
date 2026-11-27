@@ -110,7 +110,7 @@ def ci_section(data: dict[str, Any]) -> str:
         groups.setdefault(r["group"], []).append(r)
     parts = [
         '<section aria-labelledby="ci"><h2 id="ci">CI on main</h2>',
-        '<p class="lede">The latest run of each workflow on the default branch. One failing workflow marks the repo failing.</p>',
+        '<p class="lede">The latest completed run of each workflow on the default branch. One failing workflow marks the repo failing.</p>',
     ]
     for group, repos in groups.items():
         parts.append(

@@ -60,6 +60,7 @@ def fake_github(request: httpx.Request) -> httpx.Response:
         )
     if "/actions/workflows/" in path:
         assert request.url.params["branch"] == "main"
+        assert request.url.params["status"] == "completed"
         wf = parts[-2]
         if wf == "4":  # runs on tags only: none on main
             return httpx.Response(200, json={"workflow_runs": []})

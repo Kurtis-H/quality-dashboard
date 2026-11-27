@@ -41,7 +41,10 @@ def repo_info(gh: httpx.Client, owner: str, repo: str) -> dict[str, Any]:
 
 
 def latest_runs(gh: httpx.Client, owner: str, repo: str, branch: str) -> list[Run]:
-    """The latest run on `branch` of each of the repo's own active workflows.
+    """The latest completed run on `branch` of each of the repo's own active workflows.
+
+    Completed only: a run still going says nothing yet, and this dashboard's
+    own workflow is always mid-run while it collects.
 
     GitHub's built-in workflows (Dependabot, default CodeQL setup) live under
     `dynamic/` and are skipped: they aren't part of the repo's CI. A workflow
@@ -55,7 +58,12 @@ def latest_runs(gh: httpx.Client, owner: str, repo: str, branch: str) -> list[Ru
             continue
         rr = gh.get(
             f"/repos/{owner}/{repo}/actions/workflows/{wf['id']}/runs",
-            params={"branch": branch, "per_page": 1, "exclude_pull_requests": "true"},
+            params={
+                "branch": branch,
+                "status": "completed",
+                "per_page": 1,
+                "exclude_pull_requests": "true",
+            },
         )
         rr.raise_for_status()
         found = rr.json()["workflow_runs"]
