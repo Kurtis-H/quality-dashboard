@@ -140,9 +140,41 @@ def test_data_is_plain_json(data: dict) -> None:
     assert data["generated_at"] == "2026-11-27T18:00:00+00:00"
 
 
-def test_an_api_error_stops_the_build() -> None:
+def test_an_api_error_stops_the_build(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("dashboard.github.time.sleep", lambda s: None)
+
     def broken(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500)
 
     with client(transport=httpx.MockTransport(broken)) as gh, pytest.raises(httpx.HTTPStatusError):
         collect_module.collect(gh)
+
+
+def test_transient_errors_are_retried_then_succeed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("dashboard.github.time.sleep", lambda s: None)
+    calls = {"n": 0}
+
+    def flaky(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise httpx.RemoteProtocolError("Server disconnected without sending a response.")
+        if calls["n"] == 2:
+            return httpx.Response(502)
+        return fake_github(request)
+
+    with client(transport=httpx.MockTransport(flaky)) as gh:
+        assert collect(gh)["repos"]
+    assert calls["n"] > 2
+
+
+def test_a_client_error_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("dashboard.github.time.sleep", lambda s: None)
+    calls = {"n": 0}
+
+    def missing(request: httpx.Request) -> httpx.Response:
+        calls["n"] += 1
+        return httpx.Response(404)
+
+    with client(transport=httpx.MockTransport(missing)) as gh, pytest.raises(httpx.HTTPStatusError):
+        collect(gh)
+    assert calls["n"] == 1

@@ -53,6 +53,8 @@ jobs:
         # Read-only: public repo data, with this run's own token for the rate limit.
         env:
           GITHUB_TOKEN: ${{ github.token }}
+        # bash -eo pipefail: without it, a failed collect piped into tee passes.
+        shell: bash
         run: python -m dashboard build --out _site | tee -a "$GITHUB_STEP_SUMMARY"
       - name: The page matches its data, in a real browser
         env:

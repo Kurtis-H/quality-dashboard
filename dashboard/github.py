@@ -4,12 +4,35 @@ from __future__ import annotations
 
 import base64
 import os
+import time
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
 API = os.environ.get("GITHUB_API_URL", "https://api.github.com")
+
+
+RETRIES = 3
+RETRY_STATUSES = {500, 502, 503, 504}
+
+
+def get(gh: httpx.Client, path: str, params: dict[str, Any] | None = None) -> httpx.Response:
+    """GET with a few retries on a dropped connection or a GitHub 5xx, then raise.
+
+    A 4xx is never retried: it means the request itself is wrong.
+    """
+    for attempt in range(RETRIES + 1):
+        try:
+            r = gh.get(path, params=params)
+            if r.status_code not in RETRY_STATUSES or attempt == RETRIES:
+                r.raise_for_status()
+                return r
+        except httpx.TransportError:
+            if attempt == RETRIES:
+                raise
+        time.sleep(2**attempt)
+    raise AssertionError("unreachable")
 
 
 @dataclass(frozen=True)
@@ -29,8 +52,7 @@ def client(token: str | None = None, transport: httpx.BaseTransport | None = Non
 
 
 def repo_info(gh: httpx.Client, owner: str, repo: str) -> dict[str, Any]:
-    r = gh.get(f"/repos/{owner}/{repo}")
-    r.raise_for_status()
+    r = get(gh, f"/repos/{owner}/{repo}")
     data = r.json()
     return {
         "description": data.get("description") or "",
@@ -50,13 +72,13 @@ def latest_runs(gh: httpx.Client, owner: str, repo: str, branch: str) -> list[Ru
     `dynamic/` and are skipped: they aren't part of the repo's CI. A workflow
     that has never run on the branch (one that runs on tags only) is skipped.
     """
-    r = gh.get(f"/repos/{owner}/{repo}/actions/workflows", params={"per_page": 100})
-    r.raise_for_status()
+    r = get(gh, f"/repos/{owner}/{repo}/actions/workflows", params={"per_page": 100})
     runs = []
     for wf in r.json()["workflows"]:
         if wf["state"] != "active" or not wf["path"].startswith(".github/workflows/"):
             continue
-        rr = gh.get(
+        rr = get(
+            gh,
             f"/repos/{owner}/{repo}/actions/workflows/{wf['id']}/runs",
             params={
                 "branch": branch,
@@ -65,7 +87,6 @@ def latest_runs(gh: httpx.Client, owner: str, repo: str, branch: str) -> list[Ru
                 "exclude_pull_requests": "true",
             },
         )
-        rr.raise_for_status()
         found = rr.json()["workflow_runs"]
         if not found:
             continue
@@ -83,8 +104,7 @@ def latest_runs(gh: httpx.Client, owner: str, repo: str, branch: str) -> list[Ru
 
 
 def file_text(gh: httpx.Client, owner: str, repo: str, path: str) -> str:
-    r = gh.get(f"/repos/{owner}/{repo}/contents/{path}")
-    r.raise_for_status()
+    r = get(gh, f"/repos/{owner}/{repo}/contents/{path}")
     data = r.json()
     if data.get("encoding") != "base64":
         raise ValueError(f"{repo}/{path}: unexpected encoding {data.get('encoding')!r}")
