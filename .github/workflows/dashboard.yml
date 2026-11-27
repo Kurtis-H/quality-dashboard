@@ -1,0 +1,81 @@
+name: Dashboard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Daily, so the page tracks the other repos' CI and findings.
+    - cron: "41 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time; a newer run replaces a queued one.
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Lint, types and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - run: pip install --require-hashes -r requirements.txt
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy
+      - run: python -m pytest -v -p no:cacheprovider tests/unit
+
+  build:
+    name: Build and check the dashboard
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - run: pip install --require-hashes -r requirements.txt
+      - run: python -m playwright install --with-deps chromium
+      - name: Collect from GitHub and render
+        # Read-only: public repo data, with this run's own token for the rate limit.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        # bash -eo pipefail: without it, a failed collect piped into tee passes.
+        shell: bash
+        run: python -m dashboard build --out _site | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: The page matches its data, in a real browser
+        env:
+          SITE: _site
+        run: python -m pytest -v -p no:cacheprovider tests/e2e
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
