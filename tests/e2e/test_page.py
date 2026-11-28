@@ -162,6 +162,28 @@ def test_every_finding_shows_its_status(browser: Browser, base_url: str, data: d
     page.close()
 
 
+def test_findings_come_before_the_repo_grid(browser: Browser, base_url: str) -> None:
+    page, _, _ = open_page(browser, base_url)
+    order = page.evaluate("[...document.querySelectorAll('main h2')].map(h => h.textContent)")
+    assert order.index("Assessment findings") < order.index("Repositories")
+    page.close()
+
+
+@pytest.mark.parametrize("width", [1366, 2560])
+def test_repo_card_footers_line_up(browser: Browser, base_url: str, width: int) -> None:
+    """The "Pushed" date shares the bottom line with the workflow chips on every card,
+    instead of dropping below them when a repo has several workflows."""
+    page = browser.new_page(viewport={"width": width, "height": 900})
+    page.goto(base_url + "/")
+    gaps = page.evaluate(
+        "[...document.querySelectorAll('.repo')].map(c => Math.abs("
+        "c.querySelector('.wfs').getBoundingClientRect().bottom - "
+        "c.querySelector('.repo-push').getBoundingClientRect().bottom))"
+    )
+    assert max(gaps) < 4, gaps
+    page.close()
+
+
 def test_structure_is_accessible(browser: Browser, base_url: str) -> None:
     page, _, _ = open_page(browser, base_url)
     assert page.get_by_role("heading", level=1).count() == 1

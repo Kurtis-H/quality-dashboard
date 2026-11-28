@@ -338,8 +338,8 @@ def page(data: Data, owner: str) -> str:
 <p class="summary">{escape(summary(data))}</p>
 {kpis(data)}
 {charts(data)}
-{repos_panel(data)}
 {findings_panel(data, owner)}
+{repos_panel(data)}
 </main>
 <footer>
 <p>Rebuilt daily and on every change by {link(f"https://github.com/{owner}/quality-dashboard", "quality-dashboard")}. A scheduled job reads the GitHub API and each assessment's findings register, a browser test checks every number here against its sources, and only then is the page published. Raw data: <a href="data.json">data.json</a>.</p>

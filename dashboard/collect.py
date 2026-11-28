@@ -33,6 +33,8 @@ def collect(gh: httpx.Client, now: datetime | None = None) -> dict[str, Any]:
     for group, names in config.GROUPS.items():
         for name in names:
             info = repo_info(gh, config.OWNER, name)
+            if not info["description"]:
+                info["description"] = config.FALLBACK_DESCRIPTIONS.get(name, "")
             runs = latest_runs(gh, config.OWNER, name, info["default_branch"])
             repos.append(
                 {

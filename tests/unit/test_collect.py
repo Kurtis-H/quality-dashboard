@@ -88,7 +88,7 @@ def fake_github(request: httpx.Request) -> httpx.Response:
             200,
             json={
                 "html_url": f"https://github.com/Kurtis-H/{repo}",
-                "description": f"About {repo}",
+                "description": "" if repo in ("booking-pentest", "vuln-shop") else f"About {repo}",
                 "pushed_at": "2026-11-27T10:00:00Z",
                 "default_branch": "main",
             },
@@ -178,3 +178,15 @@ def test_a_client_error_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
     with client(transport=httpx.MockTransport(missing)) as gh, pytest.raises(httpx.HTTPStatusError):
         collect(gh)
     assert calls["n"] == 1
+
+
+def test_an_empty_github_description_falls_back_and_a_real_one_wins(data: dict) -> None:
+    by_name = {r["name"]: r["description"] for r in data["repos"]}
+    assert by_name["booking-pentest"] == config.FALLBACK_DESCRIPTIONS["booking-pentest"]
+    assert by_name["vuln-shop"] == ""  # no fallback: shown empty rather than invented
+    assert by_name["api-performance-lab"] == "About api-performance-lab"  # GitHub's text wins
+
+
+def test_fallbacks_only_name_repos_the_dashboard_covers() -> None:
+    covered = {name for names in config.GROUPS.values() for name in names}
+    assert set(config.FALLBACK_DESCRIPTIONS) <= covered
