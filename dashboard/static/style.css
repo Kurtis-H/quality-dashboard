@@ -64,7 +64,7 @@ h1, h2, h3 { margin: 0; }
 
 /* Header bar */
 .topbar { background: var(--top); color: var(--top-ink); }
-.topbar-inner { max-width: 1240px; margin: 0 auto; padding: 18px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.topbar-inner { max-width: 1440px; margin: 0 auto; padding: 18px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
 .brand { display: flex; align-items: center; gap: 12px; }
 .brand-mark { width: 36px; height: 36px; padding: 7px; border-radius: 9px; background: var(--good); color: #fff; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .topbar h1 { font-size: 20px; line-height: 1.2; }
@@ -72,7 +72,7 @@ h1, h2, h3 { margin: 0; }
 .brand-sub a { color: var(--top-ink); }
 .updated { font-size: 13px; color: var(--top-muted); border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 999px; padding: 4px 12px; }
 
-main { max-width: 1240px; margin: 0 auto; padding: 20px 24px 8px; }
+main { max-width: 1440px; margin: 0 auto; padding: 20px 24px 8px; }
 .summary { margin: 4px 0 18px; color: var(--muted); font-size: 15px; }
 
 /* Panels */
@@ -118,7 +118,7 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 24px 8px; }
 .k-open::before { background: var(--bad); }
 
 /* Repository cards */
-.repos { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.repos { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 12px; }
 .repo { position: relative; border: 1px solid var(--line); border-radius: 10px; padding: 14px 14px 12px 18px; display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
 .repo::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--slate); }
 .repo.good::before { background: var(--good); }
@@ -127,9 +127,9 @@ main { max-width: 1240px; margin: 0 auto; padding: 20px 24px 8px; }
 .repo-name { font-weight: 600; color: var(--ink); text-decoration: none; }
 .repo-name:hover { text-decoration: underline; }
 .repo-group { font-size: 12.5px; color: var(--muted); }
-.repo-desc { font-size: 13.5px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.repo-foot { margin-top: auto; padding-top: 8px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
-.repo-push { font-size: 12.5px; color: var(--muted); }
+.repo-desc { font-size: 13.5px; line-height: 1.45; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.9em; }
+.repo-foot { margin-top: auto; padding-top: 10px; display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 8px; }
+.repo-push { font-size: 12.5px; color: var(--muted); white-space: nowrap; line-height: 20px; }
 .wfs { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
 .wf { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--track); color: var(--ink); text-decoration: none; }
 .wf::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--slate); }
@@ -165,8 +165,23 @@ tbody th { font-weight: 600; white-space: nowrap; }
 
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-footer { max-width: 1240px; margin: 0 auto; padding: 8px 24px 40px; color: var(--muted); font-size: 13px; }
+footer { max-width: 1440px; margin: 0 auto; padding: 8px 24px 40px; color: var(--muted); font-size: 13px; }
 footer p { max-width: 90ch; }
+
+/* Big screens: use the room, and read a little larger. */
+@media (min-width: 1600px) {
+  body { font-size: 16px; }
+  .kpi-gauge, .ring { width: 128px; height: 128px; }
+  .kpi-icon { inset: 16px; width: 96px; height: 96px; padding: 26px; }
+  .kpi-value { font-size: 24px; }
+  .kpi-label { font-size: 16px; }
+  .kpi-note, .panel-head p { font-size: 14.5px; }
+  .panel-head h2 { font-size: 18px; }
+  .bar-label, .bar-total { font-size: 15px; }
+  .bar-row { grid-template-columns: 150px 1fr 32px; }
+  .repo-desc { font-size: 14px; }
+  table { font-size: 15px; }
+}
 
 @media (max-width: 960px) {
   .kpis { grid-template-columns: repeat(2, 1fr); }
