@@ -67,40 +67,46 @@ def test_tiles_show_the_totals(data: dict) -> None:
 
 def test_render_writes_the_site(tmp_path: Path, data: dict) -> None:
     render(data, tmp_path, "Kurtis-H")
-    assert {p.name for p in tmp_path.iterdir()} == {
-        "index.html",
-        "data.json",
-        "style.css",
-        "favicon.svg",
-        "fonts",
-    }
+    expected = {"index.html", "data.json", "style.css", "favicon.svg", "fonts"}
+    assert {p.name for p in tmp_path.iterdir()} == expected
     assert sorted(p.name for p in (tmp_path / "fonts").iterdir()) == [
         "OFL.txt",
-        "atkinson-hyperlegible-latin-400-normal.woff2",
-        "atkinson-hyperlegible-latin-700-normal.woff2",
+        "inter-latin-400-normal.woff2",
+        "inter-latin-600-normal.woff2",
+        "inter-latin-700-normal.woff2",
     ]
     assert json.loads((tmp_path / "data.json").read_text()) == data
 
 
-def test_verdict_reads_as_plain_sentences(data: dict) -> None:
-    from dashboard.render import verdict
+def test_summary_reads_as_plain_sentences(data: dict) -> None:
+    from dashboard.render import summary
 
     for r in data["repos"]:
         r["status"] = "passing"
     for a in data["assessments"]:
         for f in a["findings"]:
             f["status"] = "fixed"
-    text = verdict(data)
-    assert f"All {len(data['repos'])} repos pass CI." in text
-    assert "are fixed and retested, 0 are accepted with a reason, and none are open." in text
+    text = summary(data)
+    assert text.startswith(f"All {len(data['repos'])} repos pass CI.")
+    assert text.endswith("0 accepted with a reason, and none are open.")
     data["assessments"][0]["findings"][0]["status"] = "open"
-    assert "1 is still open." in verdict(data)
+    assert summary(data).endswith("1 still open.")
 
 
-def test_the_bar_has_one_segment_per_status_present(data: dict) -> None:
-    from dashboard.render import bar
+def test_bars_share_one_scale_and_skip_empty_segments() -> None:
+    from dashboard.render import stacked_bars
 
-    findings = [{"status": "fixed"}] * 3 + [{"status": "accepted"}]
-    svg = bar(findings)
-    assert svg.count("<rect") == 2 and "seg-open" not in svg
-    assert 'class="seg-fixed" x="0.000"' in svg and 'class="seg-accepted" x="75.000"' in svg
+    html = stacked_bars(
+        [("Big", {"fixed": 3, "accepted": 1, "open": 0}), ("Small", {"fixed": 1, "accepted": 0, "open": 1})],
+        "c",
+    )
+    assert "seg-open w-25" in html  # 1 of the biggest row's 4
+    assert "seg-fixed w-75" in html and "seg-accepted w-25" in html
+    assert html.count("seg-open") == 1  # the big row has no open segment
+
+
+def test_every_bar_width_class_exists() -> None:
+    from dashboard.render import STATIC
+
+    css = (STATIC / "style.css").read_text()
+    assert all(f".w-{i} {{ width: {i}%; }}" in css for i in range(101))
